@@ -1,0 +1,296 @@
+#!/usr/local/ActivePerl-5.6/bin/perl
+#
+#=====================================================================================
+# Name:         	SAS FTP Utility.pl
+#=====================================================================================
+# Author:       	Anthony Firmin
+#=====================================================================================
+# Date:         	15/2/02
+#=====================================================================================
+# Description:  	V.1.0
+# 			The purpose of this utility is to transfer SAS code files from
+#			the PC to the Zantos server to be run at a predetermined time
+#			chosen by the user.
+#			The first window to be displayed allows the user to select the
+#			SAS batch method which determines the name of the file on the
+#			server which in itself is run at a time dependant on the file
+#			name.  When the method has been selected it is displayed at
+#			the top of the window.
+#			The user then chooses the SAS code file to be transfered via a 
+#			FileSelect module and this is then displayed at the top of the
+#			main screen.
+#			The user can then chose transfer the file to the server which
+#			uses the Net::FTP module.
+#
+#=====================================================================================
+# Change History:	V.n.n	Name		Date			
+#			V2.0	Anthony Firmin	17/9/02
+#			Added the ability to transfer the files to either Burberry or
+#			Zantos by selecting a button.  Also additional verification to 
+#			ensure that only daytime run files are transferred to Burberry
+#			whilst all other files can be transferred to Zantos. 
+#
+#=====================================================================================
+######################################################################################
+################################## MODULES ###########################################
+######################################################################################
+
+use warnings;
+use strict;
+use Tk;
+use Tk::FileSelect;
+use Net::FTP;
+use File::Copy;
+
+######################################################################################
+############################### END OF MODULES #######################################
+######################################################################################
+
+######################################################################################
+############################# VARIABLES & ARRAYS #####################################
+######################################################################################
+
+#  These variables need to be changed depending on the user!!!
+
+my $username = "afirmin";
+my $password = "dogbert0";
+my $start = 'T:/personal/brayshaw_c';
+
+###############################################################
+
+# static variables...
+
+my $local_file = "";
+my $transfer_file = "";
+my $temp_file = "";
+my $svr_file = "";
+my $server = "\n";
+my $server_name = "";
+my $status = "No Batch Method selected\n";
+my $message = "No SAS Code File entered\n";
+my $success = ("File transferred successfully to server: $server_name");
+my $error_mess1 = ("FTP cannot connect to server: $server_name");
+my $error_mess2 = ("FTP cannot login to server: $server_name");
+my $error_mess3 = ("FTP cannot transfer files to server: $server_name");
+my $error_mess4 = ("FTP cannot quit server: $server_name");
+my @files = (	'One-off overnight run', 
+		'Daytime runs', 
+		'Weekly Sunday night run',
+		'Weekly Monday night run',
+		'Weekly Tuesday night run',
+		'Weekly Wednesday night run',
+		'Weekly Thursday night run',
+);
+
+######################################################################################
+######################## END OF VARIABLES & ARRAYS ###################################
+######################################################################################
+
+######################################################################################
+########################## MAIN WINDOW PROCESSING ####################################
+######################################################################################
+
+my $mw = MainWindow->new or die 'Cannot create main window';
+$mw->geometry("500x400+100+100");
+$mw->title('SAS File Transfer Utility V.1.0');
+
+# insert widgets into $mw
+
+my $label = $mw->Label(-textvariable => \$server);
+my $zantos = $mw->Button(-text => 'Zantos', -command => [\&zantos]);
+my $burberry = $mw->Button(-text => 'Burberry', -command => [\&burberry]);
+my $label1 = $mw->Label(-textvariable => \$status);
+my $label2 = $mw->Label(-textvariable => \$message);
+my $enter = $mw->Label(-text => 'Select the Batch Method');
+
+my $lb = $mw->Listbox(	-height => '7', 
+			-width => '30', 
+			-selectmode => 'browse');
+$lb->insert('end', @files);
+
+my $show = $mw->Button(		-text => 'Select Batch Method', 
+				-command => [\&display]);
+my $select = $mw->Button(	-text => 'Select SAS Code File', 
+				-command => [\&select]);
+my $transfer = $mw->Button(	-text => 'Transfer the Code File', 
+				-command => [\&transfer]);
+my $exit = $mw->Button(		-text => 'Exit', 
+				-command => [$mw => 'destroy']);
+$label->pack(-side=>'top');
+$zantos->pack(-side=>'left');
+$burberry->pack(-side=>'right');
+$label1->pack;
+$label2->pack;
+$enter->pack;
+$lb->pack;
+$show->pack(qw/-expand yes/);
+$select->pack(qw/-expand yes/);
+$transfer->pack(qw/-expand yes/);
+$exit->pack(qw/-expand yes -pady 10/);
+
+# main part of the program
+
+MainLoop;
+
+######################################################################################
+##################### END OF MAIN WINDOW PROCESSING ##################################
+######################################################################################
+
+######################################################################################
+############################### SUBROUTINES ##########################################
+######################################################################################
+#
+sub zantos {
+	$server = "Zantos\n";
+	$server_name = "Zantos";
+}
+
+sub burberry {
+	$server = "Burberry\n";
+	$server_name = "Burberry";
+}
+#
+# Display the options for the SAS batch method and allow the user to select the 
+# method...
+#
+sub display {
+	my @selections = $lb->curselection;
+	$status = "Chosen SAS batch method: \n\n";
+	foreach (@selections) {
+		$svr_file = $lb->get($_);
+		$status .= $svr_file . "\n";
+	}
+	$lb->selectionClear(0, 'end');
+	if ( $svr_file eq "One-off overnight run" ) {
+		$svr_file = "sas.file";
+	}
+	if ( $svr_file eq "Daytime runs" ) {
+		$svr_file = "sas.day";
+	}
+	if ( $svr_file eq "Weekly Sunday night run" ) {
+		$svr_file = "sas.mon";
+	}
+	if ( $svr_file eq "Weekly Monday night run" ) {
+		$svr_file = "sas.tue";
+	}
+	if ( $svr_file eq "Weekly Tuesday night run" ) {
+		$svr_file = "sas.wed";
+	}
+	if ( $svr_file eq "Weekly Wednesday night run" ) {
+		$svr_file = "sas.thu";
+	}
+	if ( $svr_file eq "Weekly Thursday night run" ) {
+		$svr_file = "sas.fri";
+	}
+}
+
+######################################################################################
+#
+# Display the select SAS code "FileSelect" window and allow user to select a file...
+#
+sub select {
+	my $fselect = $mw->FileSelect(-directory => $start);
+	$fselect->geometry("700x500");	
+	$local_file = $fselect->Show;
+	if ( $local_file eq "" ) {
+		$message = qq{No file entered\n};	
+	} else {
+		$message = qq{You chose '$local_file'\n};
+	}
+}
+
+######################################################################################
+#
+# Having made the selections, transfer the file to the server using "Net::FTP"...
+#
+sub transfer {
+
+	my $tl = $mw->Toplevel;
+
+#
+# The following two lines are commented out, if there is a problem transferring
+# files to the server, uncomment these lines save the file and re-run the utility.
+# the output will appear in the BS-DOS window.
+#
+#	print "\nTransferring... $local_file\n";
+#	print "\nTo remote file... $svr_file\n";
+#	print "\nServer name... $server_name\n";
+
+        if ( $server_name eq "" )
+        {
+                die $tl->Button(-height => '10',
+                                -width => '40',
+                                -background => "red",
+                                -text => 'You need to select a server',
+                                -command => sub {$tl->destroy})->pack;
+        }
+
+        if ( $svr_file eq "" )
+        {
+                die $tl->Button(-height => '10',
+                                -width => '40',
+                                -background => "red",
+                                -text => 'You need to select a batch method',
+                                -command => sub {$tl->destroy})->pack;
+        }
+
+        if ( $server_name eq "Burberry" && $svr_file ne "sas.day" )
+        {
+                die $tl->Button(-height => '10',
+                                -width => '40',
+                                -background => "red",
+                                -text => 'You can only transfer daytime run files to Burberry',
+                                -command => sub {$tl->destroy})->pack;
+        }
+
+        if ( $local_file eq "" )
+        {
+                die $tl->Button(-height => '10',
+                                -width => '40',
+                                -background => "red",
+                                -text => 'You need to select a SAS Code file',
+                                -command => sub {$tl->destroy})->pack;
+        }
+
+	my $ftp = Net::FTP->new($server_name)
+		or die $tl->Button(	-height => '7',
+					-width => '30',
+					-background => "red",
+					-textvariable => \$error_mess1, 
+					-command => sub {$tl->destroy})->pack;
+
+	$ftp->login($username, $password)
+		or die $tl->Button(	-height => '7',
+					-width => '30',
+					-background => "red",
+					-variable => \$error_mess2, 
+					-command => sub {$tl->destroy})->pack;
+
+	$ftp->put($local_file, $svr_file)
+		or die $tl->Button(	-height => '7',
+					-width => '30',
+					-background => "red",
+					-textvariable => \$error_mess3, 
+					-command => sub {$tl->destroy})->pack;
+
+	$ftp->quit()
+		or die $tl->Button(	-height => '7',
+					-width => '30',
+					-background => "red",
+					-textvariable => \$error_mess4, 
+					-command => sub {$tl->destroy})->pack;
+
+	$tl->title('Success transferring file to...');
+	$tl->geometry("300x50-400-300");
+	$tl->Button(	-height => '15',
+			-width => '60',
+			-background => "aquamarine",
+			-textvariable => \$server_name, 
+			-command => sub {$tl->destroy})->pack;
+
+}
+
+######################################################################################
+############################ END OFSUBROUTINES #######################################
+######################################################################################
+
